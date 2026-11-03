@@ -1,0 +1,723 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <link rel="manifest" href="./manifest.json">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WeatherPulse - Aplikasi Cuaca Live</title>
+  
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'sans-serif'],
+          },
+          colors: {
+            brand: {
+              50: '#f0f9ff',
+              100: '#e0f2fe',
+              500: '#0284c7',
+              600: '#0369a1',
+              900: '#0c4a6e',
+            }
+          }
+        }
+      }
+    }
+  </script>
+
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+    
+    body {
+      font-family: 'Inter', sans-serif;
+      transition: background-color 0.4s ease, color 0.4s ease;
+    }
+    
+    /* Dynamic Weather Background Gradients */
+    .bg-weather-clear-day {
+      background: linear-gradient(135deg, #38ef7d 0%, #11998e 100%);
+    }
+    .bg-weather-clear-night {
+      background: linear-gradient(135deg, #0f2027 0%, #203a43 50%, #2c5364 100%);
+    }
+    .bg-weather-cloudy {
+      background: linear-gradient(135deg, #616161 0%, #9bc5c3 100%);
+    }
+    .bg-weather-rain {
+      background: linear-gradient(135deg, #4b6cb7 0%, #182848 100%);
+    }
+    .bg-weather-thunder {
+      background: linear-gradient(135deg, #1f1c2c 0%, #928dab 100%);
+    }
+    .bg-weather-snow {
+      background: linear-gradient(135deg, #e6dada 0%, #274046 100%);
+    }
+
+    /* Glassmorphism utility */
+    .glass-card {
+      background: rgba(255, 255, 255, 0.2);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid rgba(255, 255, 255, 0.25);
+    }
+    .dark .glass-card {
+      background: rgba(15, 23, 42, 0.55);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    /* Custom Scrollbar */
+    ::-webkit-scrollbar {
+      height: 6px;
+      width: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: rgba(0, 0, 0, 0.05);
+      border-radius: 10px;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.3);
+      border-radius: 10px;
+    }
+    .dark ::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.15);
+    }
+  </style>
+</head>
+
+<body class="min-h-screen bg-slate-100 dark:bg-slate-950 text-slate-800 dark:text-slate-100 transition-colors duration-300 relative overflow-x-hidden">
+
+  <!-- Background Glow Effects -->
+  <div class="fixed top-[-10%] left-[-10%] w-[50vw] h-[50vw] rounded-full bg-sky-400/20 blur-[120px] pointer-events-none"></div>
+  <div class="fixed bottom-[-10%] right-[-10%] w-[50vw] h-[50vw] rounded-full bg-indigo-500/20 blur-[120px] pointer-events-none"></div>
+
+  <div class="max-w-6xl mx-auto px-4 py-6 md:py-10 relative z-10">
+
+    <!-- Header & Controls -->
+    <header class="flex flex-col md:flex-row justify-between items-center gap-4 mb-8">
+      <div class="flex items-center space-x-3">
+        <div class="p-2.5 bg-sky-500 text-white rounded-2xl shadow-lg shadow-sky-500/30">
+          <i data-lucide="cloud-sun" class="w-8 h-8"></i>
+        </div>
+        <div>
+          <h1 class="text-2xl font-bold tracking-tight">WeatherPulse</h1>
+          <p class="text-xs text-slate-500 dark:text-slate-400">Prakiraan Cuaca Real-Time Open-Meteo</p>
+        </div>
+      </div>
+
+      <!-- Search & Dark Mode Bar -->
+      <div class="flex items-center gap-3 w-full md:w-auto">
+        <div class="relative flex-1 md:w-80">
+          <div class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+            <i data-lucide="search" class="w-4 h-4"></i>
+          </div>
+          <input 
+            type="text" 
+            id="cityInput" 
+            placeholder="Cari nama kota (misal: Jakarta, Bandung, Tokyo)..." 
+            class="w-full pl-10 pr-10 py-2.5 rounded-2xl glass-card text-sm focus:outline-none focus:ring-2 focus:ring-sky-500 transition shadow-sm placeholder:text-slate-400"
+            autocomplete="off"
+          >
+          <button id="clearSearch" class="hidden absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
+            <i data-lucide="x" class="w-4 h-4"></i>
+          </button>
+          
+          <!-- Dropdown Suggestion -->
+          <div id="suggestions" class="hidden absolute left-0 right-0 top-full mt-2 glass-card bg-white/90 dark:bg-slate-900/95 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 z-50 overflow-hidden max-h-60 overflow-y-auto"></div>
+        </div>
+
+        <!-- GPS Button -->
+        <button id="btnGeo" title="Gunakan Lokasi Saat Ini" class="p-2.5 rounded-2xl glass-card hover:bg-white/40 dark:hover:bg-slate-800/60 transition shadow-sm text-sky-600 dark:text-sky-400">
+          <i data-lucide="crosshair" class="w-5 h-5"></i>
+        </button>
+
+        <!-- Dark Mode Toggle -->
+        <button id="btnTheme" title="Ganti Tema" class="p-2.5 rounded-2xl glass-card hover:bg-white/40 dark:hover:bg-slate-800/60 transition shadow-sm">
+          <i data-lucide="moon" id="themeIcon" class="w-5 h-5"></i>
+        </button>
+      </div>
+    </header>
+
+    <!-- Error/Notice Bar -->
+    <div id="errorAlert" class="hidden mb-6 p-4 rounded-2xl bg-red-500/10 border border-red-500/20 text-red-600 dark:text-red-400 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <i data-lucide="alert-circle" class="w-5 h-5 flex-shrink-0"></i>
+        <span id="errorMessage" class="text-sm font-medium">Gagal memuat data.</span>
+      </div>
+      <button onclick="hideError()" class="text-red-500 hover:text-red-700">
+        <i data-lucide="x" class="w-4 h-4"></i>
+      </button>
+    </div>
+
+    <!-- Loading Skeleton / Spinner -->
+    <div id="loadingSpinner" class="hidden py-24 text-center">
+      <div class="inline-block animate-spin rounded-full h-12 w-12 border-4 border-sky-500 border-t-transparent"></div>
+      <p class="mt-4 text-slate-500 text-sm font-medium">Mengambil data cuaca terkini...</p>
+    </div>
+
+    <!-- Main Content Container -->
+    <main id="weatherContainer" class="space-y-6">
+
+      <!-- Top Row: Main Weather Banner + Highlight Metrics -->
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+        <!-- Banner Cuaca Utama -->
+        <div id="mainBanner" class="lg:col-span-2 rounded-3xl p-6 md:p-8 glass-card relative overflow-hidden flex flex-col justify-between shadow-xl transition-all duration-500">
+          <!-- Weather Decorative Icon overlay -->
+          <div class="absolute -right-6 -bottom-6 opacity-15 pointer-events-none text-slate-900 dark:text-white">
+            <i id="bgWeatherIcon" data-lucide="cloud-sun" class="w-64 h-64"></i>
+          </div>
+
+          <div class="flex justify-between items-start z-10">
+            <div>
+              <div class="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider px-3 py-1 rounded-full bg-slate-900/10 dark:bg-white/10 w-fit mb-3">
+                <i data-lucide="map-pin" class="w-3.5 h-3.5"></i>
+                <span id="locationName">Memuat...</span>
+              </div>
+              <h2 id="currentTemp" class="text-6xl md:text-7xl font-extrabold tracking-tighter my-2">--°C</h2>
+              <p id="weatherCondition" class="text-lg md:text-xl font-medium text-slate-600 dark:text-slate-300">--</p>
+            </div>
+            <div id="mainIconContainer" class="p-4 rounded-3xl bg-white/20 dark:bg-white/10 backdrop-blur-md shadow-inner">
+              <i id="weatherIcon" data-lucide="sun" class="w-16 h-16 md:w-20 md:h-20 text-amber-500"></i>
+            </div>
+          </div>
+
+          <div class="pt-8 border-t border-slate-900/10 dark:border-white/10 flex flex-wrap gap-4 text-xs md:text-sm text-slate-600 dark:text-slate-300 z-10">
+            <div class="flex items-center gap-1.5">
+              <i data-lucide="thermometer" class="w-4 h-4 text-rose-500"></i>
+              <span>Terasa seperti: <strong id="feelsLike" class="text-slate-800 dark:text-white">--°C</strong></span>
+            </div>
+            <div class="flex items-center gap-1.5">
+              <i data-lucide="arrow-up" class="w-4 h-4 text-emerald-500"></i>
+              <span>Tertinggi: <strong id="tempMax" class="text-slate-800 dark:text-white">--°C</strong></span>
+            </div>
+            <div class="flex items-center gap-1.5">
+              <i data-lucide="arrow-down" class="w-4 h-4 text-sky-500"></i>
+              <span>Terendah: <strong id="tempMin" class="text-slate-800 dark:text-white">--°C</strong></span>
+            </div>
+            <div class="flex items-center gap-1.5">
+              <i data-lucide="clock" class="w-4 h-4 text-purple-500"></i>
+              <span id="lastUpdated">Diperbarui: --</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Metric Grid Highlights -->
+        <div class="grid grid-cols-2 gap-4">
+
+          <!-- Wind -->
+          <div class="rounded-3xl p-5 glass-card flex flex-col justify-between shadow-sm">
+            <div class="flex justify-between items-center">
+              <span class="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase">Angin</span>
+              <div class="p-2 rounded-xl bg-blue-500/10 text-blue-500">
+                <i data-lucide="wind" class="w-5 h-5"></i>
+              </div>
+            </div>
+            <div>
+              <div id="windSpeed" class="text-2xl font-bold">-- km/jam</div>
+              <p id="windDir" class="text-xs text-slate-500 dark:text-slate-400 mt-1">Arah: --</p>
+            </div>
+          </div>
+
+          <!-- Humidity -->
+          <div class="rounded-3xl p-5 glass-card flex flex-col justify-between shadow-sm">
+            <div class="flex justify-between items-center">
+              <span class="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase">Kelembapan</span>
+              <div class="p-2 rounded-xl bg-cyan-500/10 text-cyan-500">
+                <i data-lucide="droplets" class="w-5 h-5"></i>
+              </div>
+            </div>
+            <div>
+              <div id="humidity" class="text-2xl font-bold">--%</div>
+              <p id="humidityState" class="text-xs text-slate-500 dark:text-slate-400 mt-1">Normal</p>
+            </div>
+          </div>
+
+          <!-- UV Index -->
+          <div class="rounded-3xl p-5 glass-card flex flex-col justify-between shadow-sm">
+            <div class="flex justify-between items-center">
+              <span class="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase">Indeks UV</span>
+              <div class="p-2 rounded-xl bg-amber-500/10 text-amber-500">
+                <i data-lucide="sun-medium" class="w-5 h-5"></i>
+              </div>
+            </div>
+            <div>
+              <div id="uvIndex" class="text-2xl font-bold">--</div>
+              <p id="uvRisk" class="text-xs text-slate-500 dark:text-slate-400 mt-1">Tingkat: --</p>
+            </div>
+          </div>
+
+          <!-- Pressure -->
+          <div class="rounded-3xl p-5 glass-card flex flex-col justify-between shadow-sm">
+            <div class="flex justify-between items-center">
+              <span class="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase">Tekanan Air</span>
+              <div class="p-2 rounded-xl bg-indigo-500/10 text-indigo-500">
+                <i data-lucide="gauge" class="w-5 h-5"></i>
+              </div>
+            </div>
+            <div>
+              <div id="pressure" class="text-2xl font-bold">-- hPa</div>
+              <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">Tekanan Laut</p>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- Hourly Forecast Section -->
+      <div class="rounded-3xl p-6 glass-card shadow-xl">
+        <div class="flex justify-between items-center mb-4">
+          <h3 class="text-base font-bold flex items-center gap-2">
+            <i data-lucide="clock-3" class="w-5 h-5 text-sky-500"></i>
+            Prakiraan Per Jam (24 Jam Ke Depan)
+          </h3>
+        </div>
+
+        <!-- Hourly Scroll Container -->
+        <div id="hourlyContainer" class="flex gap-4 overflow-x-auto pb-4 pt-2 snap-x">
+          <!-- Filled Dynamically -->
+        </div>
+
+        <!-- Temperature Chart -->
+        <div class="mt-6 pt-6 border-t border-slate-200/50 dark:border-slate-800/50 h-48 w-full">
+          <canvas id="tempChart"></canvas>
+        </div>
+      </div>
+
+      <!-- 7-Day Forecast Section -->
+      <div class="rounded-3xl p-6 glass-card shadow-xl">
+        <h3 class="text-base font-bold flex items-center gap-2 mb-4">
+          <i data-lucide="calendar" class="w-5 h-5 text-indigo-500"></i>
+          Prakiraan 7 Hari Ke Depan
+        </h3>
+        <div id="dailyContainer" class="grid grid-cols-1 md:grid-cols-7 gap-3">
+          <!-- Filled Dynamically -->
+        </div>
+      </div>
+
+    </main>
+
+    <!-- Footer -->
+    <footer class="mt-12 text-center text-xs text-slate-500 dark:text-slate-400 space-y-1">
+      <p>Ditenagai oleh <a href="https://open-meteo.com/" target="_blank" class="underline hover:text-sky-500">Open-Meteo API</a> (Tanpa API Key)</p>
+      <p>© WeatherPulse - Aplikasi Cuaca Realtime</p>
+    </footer>
+
+  </div>
+
+  <script>
+    // State Application
+    let chartInstance = null;
+    let searchTimeout = null;
+
+    // Mapping Kode WMO Open-Meteo ke Deskripsi & Icon (Bahasa Indonesia)
+    const wmoWeatherCodes = {
+      0: { label: 'Cerah', icon: 'sun', bgClass: 'bg-weather-clear-day' },
+      1: { label: 'Cerah Berawan', icon: 'cloud-sun', bgClass: 'bg-weather-clear-day' },
+      2: { label: 'Berawan Sebagian', icon: 'cloud', bgClass: 'bg-weather-cloudy' },
+      3: { label: 'Mendung', icon: 'clouds', bgClass: 'bg-weather-cloudy' },
+      45: { label: 'Kabut Berawan', icon: 'cloud-fog', bgClass: 'bg-weather-cloudy' },
+      48: { label: 'Kabut Rime', icon: 'cloud-fog', bgClass: 'bg-weather-cloudy' },
+      51: { label: 'Gerimis Ringan', icon: 'cloud-drizzle', bgClass: 'bg-weather-rain' },
+      53: { label: 'Gerimis Sedang', icon: 'cloud-drizzle', bgClass: 'bg-weather-rain' },
+      55: { label: 'Gerimis Lebat', icon: 'cloud-rain', bgClass: 'bg-weather-rain' },
+      61: { label: 'Hujan Ringan', icon: 'cloud-rain', bgClass: 'bg-weather-rain' },
+      63: { label: 'Hujan Sedang', icon: 'cloud-rain', bgClass: 'bg-weather-rain' },
+      65: { label: 'Hujan Lebat', icon: 'cloud-rain-wind', bgClass: 'bg-weather-rain' },
+      71: { label: 'Salju Ringan', icon: 'snowflake', bgClass: 'bg-weather-snow' },
+      73: { label: 'Salju Sedang', icon: 'snowflake', bgClass: 'bg-weather-snow' },
+      75: { label: 'Salju Lebat', icon: 'snowflake', bgClass: 'bg-weather-snow' },
+      80: { label: 'Hujan Lokal Ringan', icon: 'cloud-rain', bgClass: 'bg-weather-rain' },
+      81: { label: 'Hujan Lokal Sedang', icon: 'cloud-rain', bgClass: 'bg-weather-rain' },
+      82: { label: 'Hujan Badai Lokal', icon: 'cloud-lightning', bgClass: 'bg-weather-thunder' },
+      95: { label: 'Badai Petir', icon: 'cloud-lightning', bgClass: 'bg-weather-thunder' },
+      96: { label: 'Badai Petir + Es Ringan', icon: 'cloud-lightning', bgClass: 'bg-weather-thunder' },
+      99: { label: 'Badai Petir + Es Lebat', icon: 'cloud-lightning', bgClass: 'bg-weather-thunder' }
+    };
+
+    // DOM Elements
+    const cityInput = document.getElementById('cityInput');
+    const suggestionsEl = document.getElementById('suggestions');
+    const clearSearchBtn = document.getElementById('clearSearch');
+    const btnGeo = document.getElementById('btnGeo');
+    const btnTheme = document.getElementById('btnTheme');
+    const themeIcon = document.getElementById('themeIcon');
+    const errorAlert = document.getElementById('errorAlert');
+    const errorMessage = document.getElementById('errorMessage');
+    const loadingSpinner = document.getElementById('loadingSpinner');
+    const weatherContainer = document.getElementById('weatherContainer');
+
+    // Init Theme
+    if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+      document.documentElement.classList.add('dark');
+      themeIcon.setAttribute('data-lucide', 'sun');
+    } else {
+      document.documentElement.classList.remove('dark');
+      themeIcon.setAttribute('data-lucide', 'moon');
+    }
+
+    // Toggle Dark Mode
+    btnTheme.addEventListener('click', () => {
+      if (document.documentElement.classList.contains('dark')) {
+        document.documentElement.classList.remove('dark');
+        localStorage.theme = 'light';
+        themeIcon.setAttribute('data-lucide', 'moon');
+      } else {
+        document.documentElement.classList.add('dark');
+        localStorage.theme = 'dark';
+        themeIcon.setAttribute('data-lucide', 'sun');
+      }
+      lucide.createIcons();
+      if(chartInstance) updateChartColors();
+    });
+
+    // Event Input Search Autocomplete
+    cityInput.addEventListener('input', (e) => {
+      const query = e.target.value.trim();
+      if (query.length > 0) {
+        clearSearchBtn.classList.remove('hidden');
+      } else {
+        clearSearchBtn.classList.add('hidden');
+        suggestionsEl.classList.add('hidden');
+      }
+
+      clearTimeout(searchTimeout);
+      if (query.length >= 2) {
+        searchTimeout = setTimeout(() => fetchCitySuggestions(query), 300);
+      } else {
+        suggestionsEl.classList.add('hidden');
+      }
+    });
+
+    clearSearchBtn.addEventListener('click', () => {
+      cityInput.value = '';
+      clearSearchBtn.classList.add('hidden');
+      suggestionsEl.classList.add('hidden');
+    });
+
+    // Geolocation Event
+    btnGeo.addEventListener('click', getCurrentLocation);
+
+    // Fetch City Suggestions from Open-Meteo Geocoding API
+    async function fetchCitySuggestions(query) {
+      try {
+        const res = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(query)}&count=5&language=id&format=json`);
+        const data = await res.json();
+
+        if (data.results && data.results.length > 0) {
+          suggestionsEl.innerHTML = '';
+          data.results.forEach(city => {
+            const item = document.createElement('div');
+            item.className = 'px-4 py-3 hover:bg-sky-500/10 cursor-pointer text-sm flex items-center justify-between border-b border-slate-100 dark:border-slate-800 last:border-0';
+            const adminArea = city.admin1 ? `, ${city.admin1}` : '';
+            const country = city.country ? `, ${city.country}` : '';
+            item.innerHTML = `
+              <div>
+                <span class="font-semibold">${city.name}</span>
+                <span class="text-xs text-slate-500 dark:text-slate-400 block">${adminArea}${country}</span>
+              </div>
+              <i data-lucide="chevron-right" class="w-4 h-4 text-slate-400"></i>
+            `;
+            item.addEventListener('click', () => {
+              cityInput.value = `${city.name}${country}`;
+              suggestionsEl.classList.add('hidden');
+              getWeatherData(city.latitude, city.longitude, `${city.name}${country}`);
+            });
+            suggestionsEl.appendChild(item);
+          });
+          suggestionsEl.classList.remove('hidden');
+          lucide.createIcons();
+        } else {
+          suggestionsEl.classList.add('hidden');
+        }
+      } catch (err) {
+        console.error('Error fetching suggestions:', err);
+      }
+    }
+
+    // Get Weather Data from Lat & Lon
+    async function getWeatherData(lat, lon, cityName) {
+      showLoading();
+      hideError();
+
+      try {
+        const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,relative_humidity_2m,apparent_temperature,weather_code,surface_pressure,wind_speed_10m,wind_direction_10m&hourly=temperature_2m,weather_code,relative_humidity_2m,uv_index&daily=weather_code,temperature_2m_max,temperature_2m_min,uv_index_max&timezone=auto`;
+        
+        const res = await fetch(url);
+        if (!res.ok) throw new Error('Gagal mengambil data cuaca');
+        const data = await res.json();
+
+        // Update UI
+        updateUI(data, cityName);
+      } catch (err) {
+        showError('Gagal memuat data cuaca. Periksa koneksi internet Anda.');
+        console.error(err);
+      } finally {
+        hideLoading();
+      }
+    }
+
+    // Update UI Elements
+    function updateUI(data, cityName) {
+      const current = data.current;
+      const daily = data.daily;
+      const hourly = data.hourly;
+
+      const codeInfo = wmoWeatherCodes[current.weather_code] || { label: 'Tidak diketahui', icon: 'help-circle' };
+
+      // Location & Core info
+      document.getElementById('locationName').textContent = cityName;
+      document.getElementById('currentTemp').textContent = `${Math.round(current.temperature_2m)}°C`;
+      document.getElementById('weatherCondition').textContent = codeInfo.label;
+      document.getElementById('feelsLike').textContent = `${Math.round(current.apparent_temperature)}°C`;
+      document.getElementById('tempMax').textContent = `${Math.round(daily.temperature_2m_max[0])}°C`;
+      document.getElementById('tempMin').textContent = `${Math.round(daily.temperature_2m_min[0])}°C`;
+      
+      const now = new Date();
+      document.getElementById('lastUpdated').textContent = `Diperbarui: ${now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}`;
+
+      // Dynamic Weather Icon
+      const mainIcon = document.getElementById('weatherIcon');
+      const bgIcon = document.getElementById('bgWeatherIcon');
+      mainIcon.setAttribute('data-lucide', codeInfo.icon);
+      bgIcon.setAttribute('data-lucide', codeInfo.icon);
+
+      // Wind & Metrics
+      document.getElementById('windSpeed').textContent = `${current.wind_speed_10m} km/j`;
+      document.getElementById('windDir').textContent = `Arah: ${getWindDirection(current.wind_direction_10m)}`;
+      
+      document.getElementById('humidity').textContent = `${current.relative_humidity_2m}%`;
+      document.getElementById('humidityState').textContent = current.relative_humidity_2m > 70 ? 'Lembap' : current.relative_humidity_2m < 30 ? 'Kering' : 'Nyaman';
+
+      const maxUvToday = daily.uv_index_max[0] || 0;
+      document.getElementById('uvIndex').textContent = maxUvToday.toFixed(1);
+      document.getElementById('uvRisk').textContent = getUvRiskLevel(maxUvToday);
+
+      document.getElementById('pressure').textContent = `${Math.round(current.surface_pressure)} hPa`;
+
+      // Render Hourly Forecast (24 Hours)
+      renderHourly(hourly);
+
+      // Render Daily Forecast (7 Days)
+      renderDaily(daily);
+
+      // Render Chart
+      renderChart(hourly);
+
+      lucide.createIcons();
+    }
+
+    // Render Hourly Carousel
+    function renderHourly(hourly) {
+      const container = document.getElementById('hourlyContainer');
+      container.innerHTML = '';
+
+      // Take next 24 items
+      for (let i = 0; i < 24; i++) {
+        const timeStr = hourly.time[i];
+        const dateObj = new Date(timeStr);
+        const hourLabel = dateObj.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+        const temp = Math.round(hourly.temperature_2m[i]);
+        const code = hourly.weather_code[i];
+        const iconName = (wmoWeatherCodes[code] || {}).icon || 'sun';
+
+        const card = document.createElement('div');
+        card.className = 'flex-shrink-0 w-20 py-3 px-2 rounded-2xl glass-card text-center flex flex-col items-center space-y-2 snap-start border border-slate-200/40 dark:border-slate-700/40';
+        card.innerHTML = `
+          <span class="text-xs text-slate-500 dark:text-slate-400 font-medium">${hourLabel}</span>
+          <i data-lucide="${iconName}" class="w-6 h-6 text-sky-500 my-1"></i>
+          <span class="text-sm font-bold">${temp}°C</span>
+        `;
+        container.appendChild(card);
+      }
+    }
+
+    // Render 7-Day Forecast
+    function renderDaily(daily) {
+      const container = document.getElementById('dailyContainer');
+      container.innerHTML = '';
+
+      for (let i = 0; i < 7; i++) {
+        const dateObj = new Date(daily.time[i]);
+        const dayName = i === 0 ? 'Hari Ini' : dateObj.toLocaleDateString('id-ID', { weekday: 'short' });
+        const code = daily.weather_code[i];
+        const codeInfo = wmoWeatherCodes[code] || { label: '-', icon: 'sun' };
+        const maxTemp = Math.round(daily.temperature_2m_max[i]);
+        const minTemp = Math.round(daily.temperature_2m_min[i]);
+
+        const card = document.createElement('div');
+        card.className = 'p-3.5 rounded-2xl glass-card flex md:flex-col items-center justify-between text-center space-y-1 shadow-sm';
+        card.innerHTML = `
+          <span class="text-xs font-semibold text-slate-500 dark:text-slate-400">${dayName}</span>
+          <i data-lucide="${codeInfo.icon}" class="w-7 h-7 text-amber-500 my-1"></i>
+          <span class="text-xs font-medium text-slate-600 dark:text-slate-300 hidden md:block line-clamp-1">${codeInfo.label}</span>
+          <div class="text-xs font-bold space-x-1">
+            <span class="text-slate-800 dark:text-white">${maxTemp}°</span>
+            <span class="text-slate-400 dark:text-slate-500 font-normal">${minTemp}°</span>
+          </div>
+        `;
+        container.appendChild(card);
+      }
+    }
+
+    // Chart.js Temp Forecast
+    function renderChart(hourly) {
+      const ctx = document.getElementById('tempChart').getContext('2d');
+
+      const labels = hourly.time.slice(0, 24).map(t => new Date(t).toLocaleTimeString('id-ID', { hour: '2-digit' }));
+      const data = hourly.temperature_2m.slice(0, 24);
+
+      const isDark = document.documentElement.classList.contains('dark');
+      const gridColor = isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.05)';
+      const textColor = isDark ? '#94a3b8' : '#64748b';
+
+      if (chartInstance) chartInstance.destroy();
+
+      chartInstance = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: labels,
+          datasets: [{
+            label: 'Suhu (°C)',
+            data: data,
+            borderColor: '#0284c7',
+            borderWidth: 3,
+            backgroundColor: (context) => {
+              const bgCtx = context.chart.ctx;
+              const gradient = bgCtx.createLinearGradient(0, 0, 0, 180);
+              gradient.addColorStop(0, 'rgba(2, 132, 199, 0.35)');
+              gradient.addColorStop(1, 'rgba(2, 132, 199, 0.0)');
+              return gradient;
+            },
+            fill: true,
+            tension: 0.4,
+            pointRadius: 2,
+            pointHoverRadius: 6
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              callbacks: {
+                label: (context) => `${context.parsed.y} °C`
+              }
+            }
+          },
+          scales: {
+            x: {
+              grid: { color: gridColor },
+              ticks: { color: textColor, font: { size: 10 } }
+            },
+            y: {
+              grid: { color: gridColor },
+              ticks: { color: textColor, font: { size: 10 }, callback: (value) => `${value}°` }
+            }
+          }
+        }
+      });
+    }
+
+    function updateChartColors() {
+      if (chartInstance) {
+        const isDark = document.documentElement.classList.contains('dark');
+        const gridColor = isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.05)';
+        const textColor = isDark ? '#94a3b8' : '#64748b';
+
+        chartInstance.options.scales.x.grid.color = gridColor;
+        chartInstance.options.scales.x.ticks.color = textColor;
+        chartInstance.options.scales.y.grid.color = gridColor;
+        chartInstance.options.scales.y.ticks.color = textColor;
+        chartInstance.update();
+      }
+    }
+
+    // Get Wind Direction String
+    function getWindDirection(deg) {
+      const directions = ['Utara', 'TL', 'Timur', 'Tenggara', 'Selatan', 'Barat Daya', 'Barat', 'Barat Laut'];
+      return directions[Math.round(deg / 45) % 8];
+    }
+
+    // Get UV Risk Level Description
+    function getUvRiskLevel(uv) {
+      if (uv <= 2) return 'Rendah';
+      if (uv <= 5) return 'Sedang';
+      if (uv <= 7) return 'Tinggi';
+      if (uv <= 10) return 'Sangat Tinggi';
+      return 'Ekstrem';
+    }
+
+    // Get User Geolocation
+    function getCurrentLocation() {
+      if ('geolocation' in navigator) {
+        showLoading();
+        navigator.geolocation.getCurrentPosition(
+          async (pos) => {
+            const lat = pos.coords.latitude;
+            const lon = pos.coords.longitude;
+            try {
+              // Reverse Geocoding to get City Name
+              const res = await fetch(`https://geocoding-api.open-meteo.com/v1/reverse?latitude=${lat}&longitude=${lon}&language=id`);
+              let cityName = 'Lokasi Saya';
+              if (res.ok) {
+                const data = await res.json();
+                if (data.results && data.results.length > 0) {
+                  cityName = `${data.results[0].name}, ${data.results[0].country || ''}`;
+                }
+              }
+              getWeatherData(lat, lon, cityName);
+            } catch {
+              getWeatherData(lat, lon, 'Lokasi Terkini');
+            }
+          },
+          (error) => {
+            hideLoading();
+            showError('Gagal mendapatkan lokasi GPS. Silakan cari nama kota secara manual.');
+          }
+        );
+      } else {
+        showError('Browser Anda tidak mendukung Geolocation.');
+      }
+    }
+
+    // Helper UI Utils
+    function showLoading() {
+      loadingSpinner.classList.remove('hidden');
+      weatherContainer.classList.add('opacity-40', 'pointer-events-none');
+    }
+
+    function hideLoading() {
+      loadingSpinner.classList.add('hidden');
+      weatherContainer.classList.remove('opacity-40', 'pointer-events-none');
+    }
+
+    function showError(msg) {
+      errorMessage.textContent = msg;
+      errorAlert.classList.remove('hidden');
+    }
+
+    function hideError() {
+      errorAlert.classList.add('hidden');
+    }
+
+    // Init App (Default City: Jakarta)
+    window.onload = function() {
+      lucide.createIcons();
+      getWeatherData(-6.2088, 106.8456, 'Jakarta, Indonesia');
+    };
+  </script>
+</body>
+</html>

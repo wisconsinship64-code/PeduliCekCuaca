@@ -1,0 +1,13 @@
+{
+  "background_color": "#ffffff",
+  "dir": "ltr",
+  "display": "standalone",
+  "name": "PeduliCekCuaca",
+  "orientation": "any",
+  "scope": "/",
+  "short_name": "PeduliCekCuaca",
+  "start_url": "/",
+  "theme_color": "#ffffff",
+  "id": "pedulicekcuaca",
+  "description": "Aplikasi cuaca real-time yang akurat dan mudah digunakan"
+}
